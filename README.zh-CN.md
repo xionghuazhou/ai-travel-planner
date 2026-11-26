@@ -159,7 +159,7 @@ npm run dev                 # http://localhost:5173，/api 代理到 :8000
 
 ```bash
 # 数据库配置回归测试（SQLite NullPool）
-python -m unittest discover -s backend/tests -v
+cd backend && python -m unittest discover -s tests -v
 
 # 后端启动后：
 python backend/scripts/e2e_test.py   # 健康 → 注册 → 景点 → 完整规划 → 保存行程

@@ -159,7 +159,7 @@ npm run dev                 # http://localhost:5173, proxies /api → :8000
 
 ```bash
 # Database configuration regression test (SQLite NullPool)
-python -m unittest discover -s backend/tests -v
+cd backend && python -m unittest discover -s tests -v
 
 # With the backend running:
 python backend/scripts/e2e_test.py   # health → register → spots → full planning → save trip
