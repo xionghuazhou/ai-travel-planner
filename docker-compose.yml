@@ -1,0 +1,102 @@
+services:
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    container_name: travelai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/travelai
+      - REDIS_URL=redis://redis:6379/0
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_MODEL_CANDIDATES=${LLM_MODEL_CANDIDATES}
+      - SECRET_KEY=${SECRET_KEY}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+      - SEARCH_BACKEND=${SEARCH_BACKEND:-auto}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - vectorstore_data:/app/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Celery Worker（异步任务）
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    container_name: travelai-worker
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/travelai
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+
+  # 数据库（仅容器网络内部使用，不占用宿主机端口）
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    container_name: travelai-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=travelai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d travelai"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Redis（仅容器网络内部使用）
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: travelai-redis
+    volumes:
+      - redis_data:/data
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    container_name: travelai-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  vectorstore_data:
